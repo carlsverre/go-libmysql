@@ -10,7 +10,7 @@ import (
 // implements the sql/driver Conn interface
 type Conn struct {
 	cfg    *config
-	handle bridge.MySQLHandle
+	bridge *bridge.Bridge
 }
 
 func NewConn(dsn string) (*Conn, error) {
@@ -32,18 +32,15 @@ func NewConn(dsn string) (*Conn, error) {
 
 // Open the database connection
 func (c *Conn) open() error {
-	c.handle = bridge.MySQLInit()
+	var err error
 
-	return bridge.MySQLRealConnect(c.handle,
+	c.bridge, err = bridge.NewBridge(
 		c.cfg.host, c.cfg.port,
 		c.cfg.user, c.cfg.pass,
 		c.cfg.database,
 	)
-}
 
-// Retrieve the last error raised on the associated connection
-func (c *Conn) lastError() error {
-	return bridge.GetMySQLError(c.handle)
+	return err
 }
 
 // MemSQL does not support prepared statements at this time
@@ -58,42 +55,38 @@ func (c *Conn) Begin() (driver.Tx, error) {
 }
 
 func (c *Conn) Close() error {
-	bridge.MySQLClose(c.handle)
-	c.handle = nil
+	c.bridge.Close()
+	c.bridge = nil
 	return nil
-}
-
-func (c *Conn) query(query string, args []driver.Value) (err error) {
-	query, err = escape.EscapeQuery(c.handle, query, args)
-	if err != nil {
-		return err
-	}
-
-	return bridge.MySQLRealQuery(c.handle, query)
 }
 
 // implements the sql/driver Execer interface
 func (c *Conn) Exec(query string, args []driver.Value) (res driver.Result, err error) {
-	if err = c.query(query, args); err != nil {
+	query, err = escape.EscapeQuery(query, args)
+	if err != nil {
 		return nil, err
 	}
 
-	// flush the connection
-	if err = bridge.MySQLFlushResult(c.handle); err != nil {
+	if err = c.bridge.Execute(query); err != nil {
 		return nil, err
 	}
 
 	return &execResult{
-		rowsAffected: bridge.MySQLAffectedRows(c.handle),
-		lastInsertId: bridge.MySQLInsertId(c.handle),
+		rowsAffected: c.bridge.RowsAffected(),
+		lastInsertId: c.bridge.LastInsertID(),
 	}, nil
 }
 
 // implements the sql/driver Queryer interface
 func (c *Conn) Query(query string, args []driver.Value) (res driver.Rows, err error) {
-	if err = c.query(query, args); err != nil {
+	query, err = escape.EscapeQuery(query, args)
+	if err != nil {
 		return nil, err
 	}
 
-	return newStreamingResult(c)
+	if err = c.bridge.Query(query); err != nil {
+		return nil, err
+	}
+
+	return newStreamingResult(c), nil
 }

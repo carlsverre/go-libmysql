@@ -13,8 +13,7 @@ import (
 )
 
 // Escapes the provided value such that it is ready to be inserted directly into a query
-// If c is not nil, Escape will respect the server charset.
-func Escape(c bridge.MySQLHandle, val driver.Value) (out string, err error) {
+func Escape(val driver.Value) (out string, err error) {
 	switch val := val.(type) {
 	case int:
 		out = strconv.FormatInt(int64(val), 10)
@@ -27,9 +26,9 @@ func Escape(c bridge.MySQLHandle, val driver.Value) (out string, err error) {
 	case bool:
 		out = strconv.FormatBool(val)
 	case string:
-		out = escapeString(c, val)
+		out = escapeString(val)
 	case time.Time:
-		out = escapeTime(c, val)
+		out = escapeTime(val)
 	default:
 		if val == nil {
 			out = "NULL"
@@ -41,7 +40,7 @@ func Escape(c bridge.MySQLHandle, val driver.Value) (out string, err error) {
 	return out, err
 }
 
-func EscapeQuery(c bridge.MySQLHandle, query string, args []driver.Value) (string, error) {
+func EscapeQuery(query string, args []driver.Value) (string, error) {
 	var buf bytes.Buffer
 
 	end := len(query)
@@ -70,7 +69,7 @@ func EscapeQuery(c bridge.MySQLHandle, query string, args []driver.Value) (strin
 			if argIndex >= argsLen {
 				return "", errors.New("Not enough arguments provided")
 			}
-			out, err := Escape(c, args[argIndex])
+			out, err := Escape(args[argIndex])
 			if err != nil {
 				return "", err
 			}
@@ -88,18 +87,18 @@ func EscapeQuery(c bridge.MySQLHandle, query string, args []driver.Value) (strin
 	return buf.String(), nil
 }
 
-func escapeString(c bridge.MySQLHandle, val string) string {
-	out := bridge.MySQLRealEscapeString(c, val)
+func escapeString(val string) string {
+	out := bridge.EscapeString(val)
 	return "'" + out + "'"
 }
 
-func escapeTime(c bridge.MySQLHandle, val time.Time) string {
+func escapeTime(val time.Time) string {
 	var out string
 
 	if val.IsZero() {
 		out = "'0000-00-00'"
 	} else {
-		out = escapeString(c, val.Format(time.RFC3339))
+		out = escapeString(val.Format(time.RFC3339))
 	}
 
 	return out

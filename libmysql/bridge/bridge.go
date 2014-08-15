@@ -2,177 +2,172 @@ package bridge
 
 /*
 #cgo LDFLAGS: -L/usr/local/Cellar/mysql/5.6.19/lib -lmysqlclient  -lssl -lcrypto
-#cgo CFLAGS: -I/usr/local/Cellar/mysql/5.6.19/include/mysql -Os -g -fno-strict-aliasing
+#cgo CFLAGS: -I/usr/local/Cellar/mysql/5.6.19/include/mysql -Os -g -fno-strict-aliasing -Werror=implicit
 
-
-#include <mysql.h>
 #include <stdlib.h>
+#include "bridge.h"
 */
 import "C"
 import "unsafe"
 
-type MySQLHandle *C.struct_st_mysql
-type MySQLResHandle *C.struct_st_mysql_res
+const (
+	maxSize = 1 << 20
+)
+
+type Bridge struct {
+	h C.M_HANDLE
+}
 
 type MySQLField struct {
 	ColumnType byte
 	Name       string
 }
 
-func MySQLInit() MySQLHandle {
-	return C.mysql_init(nil)
+func init() {
+	// bootstrap the mysql library at import time
+	C.m_init()
 }
 
-func MySQLClose(h MySQLHandle) {
-	C.mysql_close(h)
+func EscapeString(val string) string {
+	in := C.CString(val)
+	defer C.free(unsafe.Pointer(in))
+
+	out := make([]*C.char, (len(val)*2)+3)
+	cOut := (*C.char)(unsafe.Pointer(&out[0]))
+
+	l := C.m_escape_string(cOut, in, C.ulong(len(val)))
+	return C.GoStringN(cOut, C.int(l))
 }
 
-func GetMySQLError(h MySQLHandle) error {
-	if errno := C.mysql_errno(h); errno != 0 {
-		err := C.mysql_error(h)
+func NewBridge(host string, port int, user, pass, database string) (*Bridge, error) {
+	bridge := new(Bridge)
+
+	cHost := C.CString(host)
+	defer C.free(unsafe.Pointer(cHost))
+
+	cPort := C.uint(port)
+
+	cUser := C.CString(user)
+	defer C.free(unsafe.Pointer(cUser))
+
+	cPass := C.CString(pass)
+	defer C.free(unsafe.Pointer(cPass))
+
+	cDatabase := C.CString(database)
+	defer C.free(unsafe.Pointer(cDatabase))
+
+	if C.m_connect(&bridge.h, cHost, cPort, cUser, cPass, cDatabase) != 0 {
+		defer bridge.Close()
+		return nil, bridge.lastError()
+	}
+
+	return bridge, nil
+}
+
+func (b *Bridge) lastError() error {
+	if errno := C.m_errno(&b.h); errno != 0 {
+		err := C.m_error(&b.h)
 		return &MySQLError{uint16(errno), C.GoString(err)}
 	}
 	return nil
 }
 
-func MySQLRealConnect(h MySQLHandle, host string, port int, user, pass, database string) error {
-	args := []*C.char{
-		C.CString(host),
-		C.CString(user),
-		C.CString(pass),
-		C.CString(database),
-	}
-
-	C.mysql_real_connect(h, args[0], args[1], args[2], args[3], C.uint(port), nil, 0)
-
-	for i, _ := range args {
-		C.free(unsafe.Pointer(args[i]))
-	}
-
-	return GetMySQLError(h)
-}
-
-func MySQLRealEscapeString(h MySQLHandle, val string) string {
-	var l C.ulong
-	in := C.CString(val)
-	defer C.free(unsafe.Pointer(in))
-
-	out := make([]*C.char, (len(val)*2)+3)
-
-	if h != nil {
-		l = C.mysql_real_escape_string(h, (*C.char)(unsafe.Pointer(&out[0])), in, C.ulong(len(val)))
-	} else {
-		l = C.mysql_escape_string((*C.char)(unsafe.Pointer(&out[0])), in, C.ulong(len(val)))
-	}
-
-	return C.GoStringN((*C.char)(unsafe.Pointer(&out[0])), C.int(l))
-}
-
-func MySQLRealQuery(h MySQLHandle, query string) error {
+func (b *Bridge) query(query string, prepResult bool) error {
 	q := C.CString(query)
-	ql := C.ulong(len(query))
 	defer C.free(unsafe.Pointer(q))
 
-	r := C.mysql_real_query(h, q, ql)
-	if r != 0 {
-		return GetMySQLError(h)
+	var cPrep C.int
+	if prepResult {
+		cPrep = 0
+	} else {
+		cPrep = 1
+	}
+
+	if C.m_query(&b.h, q, C.ulong(len(query)), cPrep) != 0 {
+		return b.lastError()
 	}
 
 	return nil
 }
 
-func MySQLAffectedRows(h MySQLHandle) int64 {
-	return int64(C.mysql_affected_rows(h))
+func (b *Bridge) Close() {
+	C.m_close(&b.h)
 }
 
-func MySQLInsertId(h MySQLHandle) int64 {
-	return int64(C.mysql_insert_id(h))
+func (b *Bridge) IsClosed() bool {
+	return b.h.mysql == nil
 }
 
-func MySQLStoreResult(h MySQLHandle) (MySQLResHandle, error) {
-	res := C.mysql_store_result(h)
-	return res, GetMySQLError(h)
+func (b *Bridge) Query(query string) error {
+	return b.query(query, true)
 }
 
-func MySQLUseResult(h MySQLHandle) (MySQLResHandle, error) {
-	res, err := C.mysql_use_result(h), GetMySQLError(h)
-	return res, err
+func (b *Bridge) Execute(query string) error {
+	return b.query(query, false)
 }
 
-// Flushes the result set so the connection is ready for another query
-func MySQLFlushResult(h MySQLHandle) error {
-	res := C.mysql_store_result(h)
-	if err := GetMySQLError(h); res == nil || err != nil {
-		return err
+func (b *Bridge) Flush() {
+	C.m_flush(&b.h)
+}
+
+func (b *Bridge) Fields() []MySQLField {
+	nFields := int(b.h.num_fields)
+	if nFields == 0 {
+		return nil
 	}
 
-	MySQLFreeResult(res)
-	return nil
+	cFields := (*[maxSize]C.MYSQL_FIELD)(unsafe.Pointer(b.h.fields))
+
+	fields := make([]MySQLField, nFields)
+	for i := 0; i < nFields; i++ {
+		fields[i].Name = C.GoStringN(cFields[i].name, C.int(cFields[i].name_length))
+		fields[i].ColumnType = byte(cFields[i]._type)
+	}
+
+	return fields
 }
 
-// Flushes the rest of the rows on a connection that has had mysql_use_result
-// called on it
-func MySQLFlushUseResult(h MySQLHandle, r MySQLResHandle) error {
-	defer MySQLFreeResult(r)
-	for {
-		if row := C.mysql_fetch_row(r); row == nil {
-			break
+func (b *Bridge) FetchRow() (*[][]byte, error) {
+	mRow := C.m_fetch_row(&b.h)
+	if mRow.has_error != 0 {
+		return nil, b.lastError()
+	}
+
+	rowPtr := (*[maxSize]*[maxSize]byte)(unsafe.Pointer(mRow.mysql_row))
+	if rowPtr == nil {
+		return nil, nil
+	}
+
+	nFields := int(b.h.num_fields)
+	cLengths := (*[maxSize]uint64)(unsafe.Pointer(mRow.lengths))
+
+	totalLength := uint64(0)
+	for i := 0; i < nFields; i++ {
+		totalLength += cLengths[i]
+	}
+
+	arena := make([]byte, 0, int(totalLength))
+	row := make([][]byte, nFields)
+
+	for i := 0; i < nFields; i++ {
+		fieldLength := cLengths[i]
+		fieldPtr := rowPtr[i]
+		if fieldPtr == nil {
+			continue
 		}
+
+		start := len(arena)
+		arena = append(arena, fieldPtr[:fieldLength]...)
+		row[i] = arena[start : start+int(fieldLength)]
 	}
 
-	return GetMySQLError(h)
+	return &row, nil
 }
 
-func MySQLFreeResult(r MySQLResHandle) {
-	C.mysql_free_result(r)
+func (b *Bridge) RowsAffected() int64 {
+	return int64(b.h.affected_rows)
 }
 
-func MySQLFetchFields(r MySQLResHandle) []MySQLField {
-	num_fields := int(C.mysql_num_fields(r))
-	fields := C.mysql_fetch_fields(r)
-
-	// hack!
-	// we cast the c array into a pointer to a theoretical super massive go array
-	// then we slice it with the extended slice syntax (:length:cap)
-	slice := (*[1 << 30]*C.struct_st_mysql_field)(unsafe.Pointer(&fields))[:num_fields:num_fields]
-
-	out := make([]MySQLField, num_fields)
-	for i, field := range slice {
-		out[i].ColumnType = byte(field._type)
-		out[i].Name = C.GoString(field.name)
-	}
-
-	return out
-}
-
-func MySQLFetchRow(h MySQLHandle, r MySQLResHandle) (*[]*[]byte, error) {
-	row := C.mysql_fetch_row(r)
-	if row == nil {
-		return nil, GetMySQLError(h)
-	}
-
-	num_fields := int(C.mysql_num_fields(r))
-	row_lengths := C.mysql_fetch_lengths(r)
-	if row_lengths == nil {
-		return nil, GetMySQLError(h)
-	}
-
-	// hack!
-	// we cast the c array into a pointer to a theoretical super massive go array
-	// then we slice it with the extended slice syntax (:length:cap)
-	field_pointers := (*[1 << 30]*C.char)(unsafe.Pointer(row))[:num_fields:num_fields]
-	field_lengths := (*[1 << 30]C.ulong)(unsafe.Pointer(row_lengths))[:num_fields:num_fields]
-
-	out := make([]*[]byte, num_fields)
-
-	for i, field := range field_pointers {
-		if field == nil {
-			out[i] = nil
-		} else {
-			tmp := C.GoBytes(unsafe.Pointer(field), C.int(field_lengths[i]))
-			out[i] = &tmp
-		}
-	}
-
-	return &out, nil
+func (b *Bridge) LastInsertID() int64 {
+	return int64(b.h.insert_id)
 }

@@ -9,45 +9,27 @@ import (
 )
 
 var (
-	rowsClosed = errors.New("Unable to interact with an already closed Rows object")
+	rowsClosed = errors.New("Unable to interact with an already closed result object")
 )
-
-type column struct {
-	*bridge.MySQLField
-}
 
 type streamingResult struct {
 	c       *Conn
-	r       bridge.MySQLResHandle
-	columns []column
+	columns []bridge.MySQLField
 	closed  bool
 }
 
-func newStreamingResult(c *Conn) (*streamingResult, error) {
-	var err error
-
+func newStreamingResult(c *Conn) *streamingResult {
 	res := new(streamingResult)
 	res.c = c
+	res.columns = c.bridge.Fields()
 
-	res.r, err = bridge.MySQLUseResult(c.handle)
-	if err != nil {
-		return nil, err
-	}
-
-	fields := bridge.MySQLFetchFields(res.r)
-	res.columns = make([]column, len(fields))
-
-	for i, field := range fields {
-		res.columns[i] = column{&field}
-	}
-
-	return res, nil
+	return res
 }
 
 func (r *streamingResult) Close() error {
 	if !r.closed {
 		r.closed = true
-		return bridge.MySQLFlushUseResult(r.c.handle, r.r)
+		r.c.bridge.Flush()
 	}
 	return nil
 }
@@ -65,7 +47,7 @@ func (r *streamingResult) Next(dest []driver.Value) error {
 		return rowsClosed
 	}
 
-	row, err := bridge.MySQLFetchRow(r.c.handle, r.r)
+	row, err := r.c.bridge.FetchRow()
 	if err != nil {
 		return err
 	} else if row == nil {
@@ -76,7 +58,7 @@ func (r *streamingResult) Next(dest []driver.Value) error {
 		if field == nil {
 			dest[i] = nil
 		} else {
-			dest[i] = *field
+			dest[i] = field
 		}
 	}
 
