@@ -1,10 +1,10 @@
-package mysqldb
+package libmysql
 
 import (
 	"database/sql/driver"
 
-	"carlsverre.com/mysqldb/bridge"
-	"carlsverre.com/mysqldb/escape"
+	"github.com/carlsverre/go-libmysql/libmysql/bridge"
+	"github.com/carlsverre/go-libmysql/libmysql/escape"
 )
 
 // implements the sql/driver Conn interface

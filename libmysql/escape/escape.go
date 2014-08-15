@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"carlsverre.com/mysqldb/bridge"
+	"github.com/carlsverre/go-libmysql/libmysql/bridge"
 )
 
 // Escapes the provided value such that it is ready to be inserted directly into a query

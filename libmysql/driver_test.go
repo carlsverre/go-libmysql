@@ -1,4 +1,4 @@
-package mysqldb
+package libmysql
 
 import (
 	"database/sql"
@@ -12,6 +12,18 @@ type DriverSuite struct {
 }
 
 var _ = Suite(&DriverSuite{})
+
+func (s *DriverSuite) mustExec(c *C, query string, args ...interface{}) sql.Result {
+	res, err := s.db.Exec(query, args...)
+	c.Assert(err, IsNil)
+	return res
+}
+
+func (s *DriverSuite) mustQuery(c *C, query string, args ...interface{}) *sql.Rows {
+	res, err := s.db.Query(query, args...)
+	c.Assert(err, IsNil)
+	return res
+}
 
 func (s *DriverSuite) SetUpSuite(c *C) {
 	var err error
@@ -40,18 +52,6 @@ func (s *DriverSuite) TearDownTest(c *C) {
 func (s *DriverSuite) TearDownSuite(c *C) {
 	err := s.db.Close()
 	c.Assert(err, IsNil)
-}
-
-func (s *DriverSuite) mustExec(c *C, query string, args ...interface{}) sql.Result {
-	res, err := s.db.Exec(query, args...)
-	c.Assert(err, IsNil)
-	return res
-}
-
-func (s *DriverSuite) mustQuery(c *C, query string, args ...interface{}) *sql.Rows {
-	res, err := s.db.Query(query, args...)
-	c.Assert(err, IsNil)
-	return res
 }
 
 func (s *DriverSuite) TestBasic(c *C) {

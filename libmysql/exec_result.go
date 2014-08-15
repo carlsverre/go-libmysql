@@ -1,4 +1,4 @@
-package mysqldb
+package libmysql
 
 // implements db/sql Result
 type execResult struct {

@@ -1,4 +1,4 @@
-package mysqldb
+package libmysql
 
 import (
 	"errors"

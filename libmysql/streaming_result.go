@@ -1,11 +1,11 @@
-package mysqldb
+package libmysql
 
 import (
 	"database/sql/driver"
 	"errors"
 	"io"
 
-	"carlsverre.com/mysqldb/bridge"
+	"github.com/carlsverre/go-libmysql/libmysql/bridge"
 )
 
 var (
