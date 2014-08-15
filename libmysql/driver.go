@@ -15,5 +15,5 @@ func (d *MySQLDBDriver) Open(dsn string) (driver.Conn, error) {
 }
 
 func init() {
-	sql.Register("mysql", &MySQLDBDriver{})
+	sql.Register("libmysql", &MySQLDBDriver{})
 }

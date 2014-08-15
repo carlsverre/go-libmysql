@@ -30,7 +30,7 @@ func (s *DriverSuite) SetUpSuite(c *C) {
 
 	s.dsn = "root@127.0.0.1:3306"
 
-	s.db, err = sql.Open("mysql", s.dsn)
+	s.db, err = sql.Open("libmysql", s.dsn)
 	c.Assert(err, IsNil)
 
 	_, err = s.db.Exec("SELECT 1")
@@ -63,6 +63,7 @@ func (s *DriverSuite) TestBasic(c *C) {
 	}
 
 	rows := s.mustQuery(c, "SELECT * FROM x ORDER BY id ASC")
+	defer rows.Close()
 	count := 0
 
 	for rows.Next() {

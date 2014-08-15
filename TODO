@@ -1,0 +1,2 @@
+* dynamic mysql include path setup such that this works on mac/linux
+* wayyyyy more tests
