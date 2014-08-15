@@ -12,13 +12,10 @@ int m_escape_string(char *out, char *in, unsigned long length) {
 int m_connect(M_HANDLE *conn, const char *host, unsigned int port, const char *user, const char *pass, const char *database) {
 	MYSQL *c;
 
-	printf("Hello world");
+	mysql_thread_init();
 
-	//mysql_thread_init();
-
-	//conn->mysql = mysql_init(0);
-	return 0;
-	//return !!mysql_real_connect(conn->mysql, host, user, pass, database, port, 0, 0);
+	conn->mysql = mysql_init(0);
+	return !mysql_real_connect(conn->mysql, host, user, pass, database, port, 0, 0);
 }
 
 void m_close(M_HANDLE *conn) {
@@ -54,7 +51,6 @@ int m_query(M_HANDLE *conn, const char *query, unsigned long len, int prep_resul
 	if (prep_result) {
 		conn->result = mysql_use_result(conn->mysql);
 	} else {
-		// flush the result set
 		conn->result = mysql_store_result(conn->mysql);
 		conn->affected_rows = mysql_affected_rows(conn->mysql);
 	}
@@ -71,7 +67,7 @@ int m_query(M_HANDLE *conn, const char *query, unsigned long len, int prep_resul
 	}
 
 	if (!prep_result) {
-		// clear the result set
+		// clear the result set for the next query
 		mysql_free_result(conn->result);
 		conn->result = 0;
 	}

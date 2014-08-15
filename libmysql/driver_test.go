@@ -28,7 +28,7 @@ func (s *DriverSuite) mustQuery(c *C, query string, args ...interface{}) *sql.Ro
 func (s *DriverSuite) SetUpSuite(c *C) {
 	var err error
 
-	s.dsn = "root@localhost"
+	s.dsn = "root@127.0.0.1:3306"
 
 	s.db, err = sql.Open("mysql", s.dsn)
 	c.Assert(err, IsNil)
@@ -55,11 +55,14 @@ func (s *DriverSuite) TearDownSuite(c *C) {
 }
 
 func (s *DriverSuite) TestBasic(c *C) {
+	expectedString := "look a ♞, oh wow"
+
 	for i := 0; i < 10; i++ {
-		s.db.Exec("INSERT INTO x (foo) VALUES (%s)", "asdf")
+		_, err := s.db.Exec("INSERT INTO x (id, foo) VALUES (%s, %s)", i+1, expectedString)
+		c.Assert(err, IsNil)
 	}
 
-	rows := s.mustQuery(c, "SELECT * FROM x")
+	rows := s.mustQuery(c, "SELECT * FROM x ORDER BY id ASC")
 	count := 0
 
 	for rows.Next() {
@@ -71,7 +74,7 @@ func (s *DriverSuite) TestBasic(c *C) {
 
 		count += 1
 		c.Assert(id, Equals, count)
-		c.Assert(name, Equals, "asdf")
+		c.Assert(name, Equals, expectedString)
 	}
 
 	c.Assert(count, Equals, 10)
@@ -86,6 +89,7 @@ func (s *DriverSuite) BenchmarkBasicInsertWithEscape(c *C) {
 
 func (s *DriverSuite) BenchmarkBasicInsertNoEscape(c *C) {
 	query := "INSERT INTO x (foo) VALUES ('asdf')"
+	s.db.Exec(query)
 	for i := 0; i < c.N; i++ {
 		s.db.Exec(query)
 	}

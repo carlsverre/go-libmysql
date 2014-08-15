@@ -20,7 +20,7 @@ type timeTuple struct {
 }
 
 func escapeAndCompare(c *C, start, end interface{}) {
-	out, err := Escape(nil, start)
+	out, err := Escape(start)
 	c.Assert(err, IsNil)
 	c.Check(out, Equals, end)
 }
@@ -59,7 +59,7 @@ func (s *EscapeSuite) TestBasic(c *C) {
 }
 
 func mustEscapeQuery(c *C, expected, query string, args ...driver.Value) {
-	out, err := EscapeQuery(nil, query, args)
+	out, err := EscapeQuery(query, args)
 	c.Assert(err, IsNil)
 	c.Check(out, Equals, expected)
 }
@@ -91,11 +91,11 @@ func (s *EscapeSuite) TestQuery(c *C) {
 	mustEscapeQuery(c, "", "")
 
 	// no params, but one target
-	_, err := EscapeQuery(nil, "%s", []driver.Value{})
+	_, err := EscapeQuery("%s", []driver.Value{})
 	c.Assert(err, Not(IsNil))
 
 	// more params than targets
-	_, err = EscapeQuery(nil, "%s", []driver.Value{1, 2})
+	_, err = EscapeQuery("%s", []driver.Value{1, 2})
 	c.Assert(err, Not(IsNil))
 }
 
@@ -103,36 +103,36 @@ func (s *EscapeSuite) BenchmarkQueryAllTypes(c *C) {
 	t := time.Date(2014, 7, 6, 5, 2, 32, 123, time.UTC)
 
 	for i := 0; i < c.N; i++ {
-		EscapeQuery(nil, "%s %s %s %s %s %s %s", []driver.Value{5, 123.123, true, false, nil, "foo bar", t})
+		EscapeQuery("%s %s %s %s %s %s %s", []driver.Value{5, 123.123, true, false, nil, "foo bar", t})
 	}
 }
 
 func (s *EscapeSuite) BenchmarkQueryBasicTypes(c *C) {
 	for i := 0; i < c.N; i++ {
-		EscapeQuery(nil, "%s %s %s %s %s", []driver.Value{5, 123.123, true, false, nil})
+		EscapeQuery("%s %s %s %s %s", []driver.Value{5, 123.123, true, false, nil})
 	}
 }
 
 func (s *EscapeSuite) BenchmarkQueryString(c *C) {
 	for i := 0; i < c.N; i++ {
-		EscapeQuery(nil, "%s %s %s %s %s", []driver.Value{"foo", "bar", "baz", "quoox", "whee"})
+		EscapeQuery("%s %s %s %s %s", []driver.Value{"foo", "bar", "baz", "quoox", "whee"})
 	}
 }
 
 func (s *EscapeSuite) BenchmarkQueryNoParams(c *C) {
 	for i := 0; i < c.N; i++ {
-		EscapeQuery(nil, "foo", []driver.Value{})
+		EscapeQuery("foo", []driver.Value{})
 	}
 }
 
 func (s *EscapeSuite) BenchmarkEscapeString(c *C) {
 	for i := 0; i < c.N; i++ {
-		Escape(nil, "foo")
+		Escape("foo")
 	}
 }
 
 func (s *EscapeSuite) BenchmarkEscapeInt(c *C) {
 	for i := 0; i < c.N; i++ {
-		Escape(nil, 1)
+		Escape(1)
 	}
 }

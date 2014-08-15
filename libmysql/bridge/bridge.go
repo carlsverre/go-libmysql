@@ -1,8 +1,8 @@
 package bridge
 
 /*
-#cgo LDFLAGS: -L/usr/local/Cellar/mysql/5.6.19/lib -lmysqlclient  -lssl -lcrypto
-#cgo CFLAGS: -I/usr/local/Cellar/mysql/5.6.19/include/mysql -Os -g -fno-strict-aliasing -Werror=implicit
+#cgo LDFLAGS: -L/usr/lib/x86_64-linux-gnu -lmysqlclient_r -lpthread -lz -lm -ldl
+#cgo CFLAGS: -I/usr/include/mysql -DBIG_JOINS=1 -fno-strict-aliasing -g -DNDEBUG -ggdb -fPIC -Werror=implicit
 
 #include <stdlib.h>
 #include "bridge.h"
@@ -72,18 +72,11 @@ func (b *Bridge) lastError() error {
 	return nil
 }
 
-func (b *Bridge) query(query string, prepResult bool) error {
+func (b *Bridge) query(query string, prepResult int) error {
 	q := C.CString(query)
 	defer C.free(unsafe.Pointer(q))
 
-	var cPrep C.int
-	if prepResult {
-		cPrep = 0
-	} else {
-		cPrep = 1
-	}
-
-	if C.m_query(&b.h, q, C.ulong(len(query)), cPrep) != 0 {
+	if C.m_query(&b.h, q, C.ulong(len(query)), C.int(prepResult)) != 0 {
 		return b.lastError()
 	}
 
@@ -99,11 +92,11 @@ func (b *Bridge) IsClosed() bool {
 }
 
 func (b *Bridge) Query(query string) error {
-	return b.query(query, true)
+	return b.query(query, 1)
 }
 
 func (b *Bridge) Execute(query string) error {
-	return b.query(query, false)
+	return b.query(query, 0)
 }
 
 func (b *Bridge) Flush() {
