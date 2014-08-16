@@ -1,8 +1,8 @@
 package bridge
 
 /*
-#cgo LDFLAGS: -L/usr/lib/x86_64-linux-gnu -lmysqlclient_r -lpthread -lz -lm -ldl
-#cgo CFLAGS: -I/usr/include/mysql -DBIG_JOINS=1 -fno-strict-aliasing -g -DNDEBUG -ggdb -fPIC -Werror=implicit
+#cgo LDFLAGS: -L/usr/lib/x86_64-linux-gnu -lmysqlclient_r -lssl -lcrypto -lpthread
+#cgo CFLAGS: -I/usr/include/mysql -O3 -g -fno-strict-aliasing -DNDEBUG -fPIC -Werror=implicit
 
 #include <stdlib.h>
 #include "bridge.h"
